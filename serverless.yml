@@ -9,6 +9,16 @@ plugins:
 # serverless-webpack configuration
 # Enable auto-packing of external modules
 custom:
+  # Stage is based on what is passed in when running serverless commands. Fallback
+  # is the stage set in provider section
+  stage: ${opt:stage, self:provider.stage}
+  # Set DynamoDB table name
+  tableName: ${self:custom.stage}-notes
+  # Set DynamoDB table thoughput for prod and all other non-prod stages
+  tableThroughputs:
+    prod: 5
+    default: 1
+  tableThroughput: ${self:custom.tableThroughputs.${self:custom.stage}, self:custom.tableThroughputs.default}
   webpack:
     webpackConfig: ./webpack.config.js
     includeModules: true
@@ -24,6 +34,9 @@ provider:
   # commit your env.yml.
   #
   #environment: ${file(env.yml):${self:provider.stage}}
+  # These environment variables are made available to our functions under process.env
+  environment:
+    tableName: ${self:custom.tableName}
   iamRoleStatements:
     - Effect: Allow
       Action:
@@ -34,7 +47,8 @@ provider:
         - dynamodb:PutItem
         - dynamodb:UpdateItem
         - dynamodb:DeleteItem
-      Resource: "arn:aws:dynamodb:eu-west-1:*:*"
+      Resource:
+        - "Fn::GetAtt": [ NotesTable, Arn ]
 
 functions:
   create:
@@ -81,3 +95,8 @@ functions:
           method: delete
           cors: true
           authorizer: aws_iam
+
+# Create our resources with separate CloudFormation templates
+resources:
+  # DynamoDB
+  - ${file(resources/dynamodb-table.yaml)}
